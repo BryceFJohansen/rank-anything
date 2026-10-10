@@ -43,6 +43,8 @@ The browser suite opens both `index.html` and `Rank-Anything.html` through `file
 - Unicode duplicate handling, preservation of invalid pasted input, and successful correction.
 - Unadded lists surviving item edits and view changes, remaining separate between collections, and clearing after submission.
 - Keyboard focus while moving, skipping, and restoring items, including restoring into an empty ballot.
+- Keyboard focus after view and collection changes, item edits and deletion, starting and saving ballots, and history pagination and deletion.
+- Dialog cancellation with Cancel or Escape returning focus to the original control, including nested collection creation and the item chooser.
 - Dialog validation errors appearing beside the input, being exposed in Chromium's accessibility tree, and clearing after correction.
 - Long unbroken names wrapping in the chooser and skipped-items list at desktop and narrow widths, with controls remaining usable.
 - Saved data surviving reload, backup download and additive import, and a narrow results layout.

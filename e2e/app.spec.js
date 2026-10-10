@@ -52,11 +52,26 @@ for (const entry of ['index.html', 'Rank-Anything.html']) {
       await page.getByRole('button', { name: '+ New collection', exact: true }).click();
       await expect(page.getByRole('dialog', { name: 'Leave this ballot?' })).toBeVisible();
       await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(
+        page.getByRole('button', { name: '+ New collection', exact: true }),
+      ).toBeFocused();
       await expect(page.locator('.rank-group').first()).toContainText('Beta');
 
       await page.getByRole('button', { name: '+ New collection', exact: true }).click();
       await page.getByRole('button', { name: 'Leave ballot', exact: true }).click();
+      await expect(page.getByRole('dialog').getByRole('textbox')).toBeFocused();
       await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(
+        page.getByRole('button', { name: '+ New collection', exact: true }),
+      ).toBeFocused();
+
+      await page.keyboard.press('Enter');
+      await page.getByRole('button', { name: 'Leave ballot', exact: true }).click();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: '+ New collection', exact: true }),
+      ).toBeFocused();
       await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
       const saved = await savedData(page);
       const collection = saved.collections[0];
@@ -70,9 +85,205 @@ for (const entry of ['index.html', 'Rank-Anything.html']) {
       await page.locator('dialog input').fill('Films');
       await page.getByRole('button', { name: 'Create collection', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Films', exact: true })).toBeVisible();
+      await expect(page.getByRole('textbox', { name: 'Items, one per line' })).toBeFocused();
       const after = await savedData(page);
       expect(after.collections).toHaveLength(2);
       expect(after.collections[0].ballots).toEqual(collection.ballots);
+    });
+
+    test('view navigation and collection changes keep keyboard focus in context', async ({
+      page,
+    }) => {
+      expect(await page.evaluate(() => document.activeElement.tagName)).toBe('BODY');
+      await createCollection(page);
+      await expect(page.getByRole('textbox', { name: 'Items, one per line' })).toBeFocused();
+      await addItems(page, ['Alpha', 'Beta']);
+      await expect(page.getByRole('textbox', { name: 'Items, one per line' })).toBeFocused();
+
+      const results = page.getByRole('button', { name: 'Results', exact: true });
+      await results.focus();
+      await page.keyboard.press('Enter');
+      await expect(results).toBeFocused();
+      await expect(results).toHaveAttribute('aria-current', 'page');
+      await page.keyboard.press('Tab');
+      const items = page.getByRole('button', { name: 'Items', exact: true });
+      await expect(items).toBeFocused();
+      await page.keyboard.press('Space');
+      await expect(items).toBeFocused();
+      await expect(items).toHaveAttribute('aria-current', 'page');
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('button', { name: 'History', exact: true })).toBeFocused();
+
+      await page.getByRole('button', { name: '+ New collection', exact: true }).click();
+      await page.getByRole('dialog').getByRole('textbox').fill('Films');
+      await page.keyboard.press('Enter');
+      const books = page
+        .getByRole('navigation', { name: 'Collections', exact: true })
+        .getByRole('button', { name: 'Books 2', exact: true });
+      await books.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('heading', { name: 'Books', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('button', { name: 'Rank', exact: true })).toBeFocused();
+      await page.getByRole('button', { name: 'Start a ballot', exact: true }).click();
+      await page
+        .getByRole('navigation', { name: 'Collections', exact: true })
+        .getByRole('button', { name: 'Films 0', exact: true })
+        .click();
+      await page.getByRole('button', { name: 'Leave ballot', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Films', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('button', { name: 'Rank', exact: true })).toBeFocused();
+    });
+
+    test('editing, cancelling, and removing items return focus to useful controls', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      await addItems(page, ['Alpha', 'Beta']);
+      const edit = (name) =>
+        page
+          .locator('.list-item')
+          .filter({ has: page.getByText(name, { exact: true }) })
+          .getByRole('button', { name: 'Edit', exact: true });
+      await edit('Beta').focus();
+      await page.keyboard.press('Enter');
+      await page.getByRole('dialog').getByRole('textbox').fill('Renamed Beta');
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(edit('Renamed Beta')).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(
+        page
+          .locator('.list-item')
+          .filter({ hasText: 'Renamed Beta' })
+          .getByRole('button', { name: 'Remove', exact: true }),
+      ).toBeFocused();
+
+      for (const cancel of ['Cancel', 'Escape']) {
+        await edit('Renamed Beta').click();
+        await page.getByRole('dialog').getByRole('textbox').fill('Discard this change');
+        if (cancel === 'Escape') await page.keyboard.press('Escape');
+        else await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await expect(edit('Renamed Beta')).toBeFocused();
+      }
+      const rename = page.getByRole('button', { name: 'Rename collection', exact: true });
+      await rename.click();
+      await page.getByRole('dialog').getByRole('textbox').fill('Reading');
+      await page.keyboard.press('Enter');
+      await expect(rename).toBeFocused();
+      await expect(page.getByRole('heading', { name: 'Reading', exact: true })).toBeVisible();
+
+      await removeItem(page, 'Renamed Beta');
+      await expect(page.getByRole('heading', { name: 'All items', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(edit('Alpha')).toBeFocused();
+      await removeItem(page, 'Alpha');
+      await expect(page.getByRole('textbox', { name: 'Items, one per line' })).toBeFocused();
+      await page.getByRole('button', { name: 'Delete collection', exact: true }).click();
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Delete collection', exact: true })
+        .click();
+      await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(
+        page.getByRole('button', { name: 'Create a collection', exact: true }),
+      ).toBeFocused();
+    });
+
+    test('ballot actions move focus to the next step and chooser cancellation restores it', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      await addItems(page, ['Alpha', 'Beta']);
+      await chooseItems(page, ['Alpha', 'Beta']);
+      const heading = page.getByRole('heading', { name: 'Go with your preference', exact: true });
+      await expect(heading).toBeFocused();
+      await page.keyboard.press('Tab');
+      const chooser = page.getByRole('button', { name: 'Choose items', exact: true });
+      await expect(chooser).toBeFocused();
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Escape');
+      await expect(chooser).toBeFocused();
+      await page.keyboard.press('Enter');
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(chooser).toBeFocused();
+
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).focus();
+      await page.keyboard.press('Space');
+      const next = page.getByRole('button', { name: 'Next round', exact: true });
+      await expect(next).toBeFocused();
+      expect((await savedData(page)).collections[0].ballots).toHaveLength(1);
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('button', { name: 'View results', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('button', { name: 'Results', exact: true })).toBeFocused();
+      await page.getByRole('button', { name: 'Rank', exact: true }).click();
+      await next.focus();
+      await page.keyboard.press('Enter');
+      await expect(heading).toBeFocused();
+      await page.getByRole('button', { name: 'Discard ballot', exact: true }).click();
+      await page.getByRole('button', { name: 'Discard', exact: true }).click();
+      const start = page.getByRole('button', { name: 'Start a ballot', exact: true });
+      await expect(start).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(heading).toBeFocused();
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).focus();
+      await page.keyboard.press('Enter');
+      await expect(next).toBeFocused();
+      expect((await savedData(page)).collections[0].ballots).toHaveLength(2);
+    });
+
+    test('history pagination and deletion retain focus when controls disappear or become disabled', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      await addItems(page, ['Alpha', 'Beta']);
+      await chooseItems(page, ['Alpha', 'Beta']);
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
+      const data = await savedData(page);
+      const ballot = data.collections[0].ballots[0];
+      data.collections[0].ballots = Array.from({ length: 51 }, (_, i) => ({
+        ...ballot,
+        id: 'ballot-' + i,
+      }));
+      await page.evaluate(
+        (backup) => localStorage.setItem('rank-anything-v1', JSON.stringify(backup)),
+        data,
+      );
+      await page.reload();
+      await page.getByRole('button', { name: 'History', exact: true }).click();
+      const older = page.getByRole('button', { name: 'Older', exact: true });
+      const newer = page.getByRole('button', { name: 'Newer', exact: true });
+      await older.focus();
+      await page.keyboard.press('Enter');
+      await expect(newer).toBeFocused();
+      await expect(older).toBeDisabled();
+      await page.keyboard.press('Space');
+      await expect(older).toBeFocused();
+      await expect(newer).toBeDisabled();
+      await page.keyboard.press('Enter');
+      await page.getByRole('button', { name: 'Delete ballot', exact: true }).click();
+      await page.getByRole('button', { name: 'Remove ballot', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Your ballots', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(
+        page.getByRole('button', { name: 'Undo this ballot', exact: true }),
+      ).toBeFocused();
+
+      data.collections[0].ballots = [ballot];
+      await page.evaluate(
+        (backup) => localStorage.setItem('rank-anything-v1', JSON.stringify(backup)),
+        data,
+      );
+      await page.reload();
+      await page.getByRole('button', { name: 'History', exact: true }).click();
+      await page.getByRole('button', { name: 'Undo this ballot', exact: true }).click();
+      await page.getByRole('button', { name: 'Remove ballot', exact: true }).click();
+      await expect(
+        page.getByRole('heading', { name: 'Every preference has a history', exact: true }),
+      ).toBeFocused();
     });
 
     test('cancelling deletion and removing an unrelated item preserve draft ties and skips', async ({

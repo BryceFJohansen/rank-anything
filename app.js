@@ -4,6 +4,8 @@
   const KEY = 'rank-anything-v1';
   const root = document.getElementById('app');
   const pendingItemInputs = new Map();
+  const openDialogs = [];
+  let pendingFocus = null;
   let state = { version: 1, collections: [] },
     selected = null,
     tab = 'Rank',
@@ -36,6 +38,45 @@
   const collection = () => state.collections.find((c) => c.id === selected);
   const name = (id) => collection()?.items.find((i) => i.id === id)?.name || 'Removed item';
   const countRanked = () => draft?.groups.flat().length || 0;
+  function focusContent(ids) {
+    pendingFocus = [ids].flat().filter(Boolean);
+    // The page is inert until the last modal closes.
+    if (openDialogs.length) return;
+    const targets = pendingFocus;
+    pendingFocus = null;
+    for (const id of [...targets, 'view-heading']) {
+      const target = document.getElementById(id);
+      if (target && !target.disabled) {
+        target.focus();
+        return;
+      }
+    }
+  }
+  function showDialog(d) {
+    // A replacement dialog inherits the original page control as its return target.
+    const opener = openDialogs.at(-1)?.opener || document.activeElement;
+    const entry = { opener };
+    const close = () => {
+      const focused = document.activeElement;
+      d.close();
+      d.remove();
+      openDialogs.splice(openDialogs.indexOf(entry), 1);
+      if (openDialogs.length) {
+        // Closing an earlier prompt must not take focus from its replacement.
+        if (focused?.isConnected) focused.focus();
+      } else if (pendingFocus) focusContent(pendingFocus);
+      else if (opener?.isConnected) opener.focus();
+      else focusContent(opener?.id);
+    };
+    d.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      close();
+    });
+    openDialogs.push(entry);
+    document.body.append(d);
+    d.showModal();
+    return close;
+  }
   function notify(text) {
     document.querySelector('.toast')?.remove();
     clearTimeout(toastTimer);
@@ -115,10 +156,6 @@
       field?.focus();
       return false;
     };
-    const close = () => {
-      d.close();
-      d.remove();
-    };
     const ok = () => {
       const value = field?.value.trim();
       if (field && !value) {
@@ -131,17 +168,18 @@
       el(
         'div',
         { class: 'actions' },
-        btn('Cancel', close),
+        btn('Cancel', () => close()),
         btn(label, ok, danger ? 'danger' : 'primary'),
       ),
     );
-    d.addEventListener('cancel', () => d.remove());
     if (field)
       field.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') ok();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          ok();
+        }
       });
-    document.body.append(d);
-    d.showModal();
+    const close = showDialog(d);
     if (field) {
       field.focus();
       field.select();
@@ -179,7 +217,7 @@
           savedRound = null;
           tab = 'Items';
           persist();
-          render();
+          render('bulk-items');
         },
         { label: 'Create collection', inputValue: '' },
       ),
@@ -191,7 +229,7 @@
       draft = null;
       savedRound = null;
       tab = 'Rank';
-      render();
+      render('view-heading');
     };
     confirmLeaveDraft(go);
   }
@@ -226,7 +264,7 @@
     savedRound = null;
     tab = 'Rank';
     persist();
-    render();
+    render('view-heading');
     notify('Demo items added. No preferences have been assumed.');
   }
   function download(data, filename, type = 'application/json') {
@@ -278,7 +316,7 @@
           savedRound = null;
           tab = 'Results';
           persist();
-          render();
+          render('view-heading');
           notify('Backup imported. Existing collections preserved.');
         },
         { label: 'Import collections' },
@@ -303,7 +341,7 @@
     savedRound = null;
     tab = 'Rank';
     draft = { groups: ids.map((id) => [id]), skipped: [] };
-    render();
+    render('ballot-heading');
   }
   function chooseItems() {
     const d = el('dialog', { class: 'modal', 'aria-label': 'Choose ballot items' });
@@ -315,10 +353,9 @@
         if (chosen.size < 2 || chosen.size > E.LIMITS.batchSize) return;
         savedRound = null;
         draft = { groups: [...chosen].map((id) => [id]), skipped: [] };
-        d.close();
-        d.remove();
         tab = 'Rank';
-        render();
+        render('ballot-heading');
+        close();
       },
       'primary',
       { disabled: true },
@@ -361,27 +398,15 @@
       el(
         'div',
         { class: 'actions' },
-        btn('Cancel', () => {
-          d.close();
-          d.remove();
-        }),
+        btn('Cancel', () => close()),
         start,
       ),
     );
-    d.addEventListener('cancel', () => d.remove());
-    document.body.append(d);
-    d.showModal();
+    const close = showDialog(d);
   }
   function mutateDraft(fn, focusIds = []) {
     fn();
-    render();
-    for (const id of [focusIds].flat()) {
-      const target = document.getElementById(id);
-      if (target && !target.disabled) {
-        target.focus();
-        break;
-      }
-    }
+    render(focusIds);
   }
   function move(id, direction) {
     mutateDraft(() => {
@@ -451,7 +476,7 @@
     draft = null;
     savedRound = { collectionId: c.id, ballotId: ballot.id };
     tab = 'Rank';
-    render();
+    render('next-round');
   }
   function rankView(c) {
     if (c.items.length < 2 && !draft)
@@ -469,9 +494,10 @@
           'Add your items',
           () => {
             tab = 'Items';
-            render();
+            render('bulk-items');
           },
           'primary',
+          { id: 'add-your-items' },
         ),
       );
     if (
@@ -496,10 +522,10 @@
         el(
           'div',
           { class: 'actions', style: 'justify-content:center' },
-          btn('Next round', startBallot, 'primary'),
+          btn('Next round', startBallot, 'primary', { id: 'next-round' }),
           btn('View results', () => {
             tab = 'Results';
-            render();
+            render('tab-Results');
           }),
           btn('Choose items', chooseItems),
         ),
@@ -533,7 +559,7 @@
           el(
             'div',
             { class: 'actions', style: 'justify-content:center' },
-            btn('Start a ballot', startBallot, 'primary'),
+            btn('Start a ballot', startBallot, 'primary', { id: 'start-ballot' }),
             btn('Choose items', chooseItems),
           ),
           el(
@@ -552,7 +578,7 @@
         el(
           'div',
           {},
-          el('h2', {}, 'Go with your preference'),
+          el('h2', { id: 'ballot-heading', tabindex: '-1' }, 'Go with your preference'),
           el('p', { class: 'muted' }, 'Use the arrows to order items. First is most preferred.'),
         ),
         el(
@@ -680,7 +706,7 @@
               () => {
                 draft = null;
                 savedRound = null;
-                render();
+                render(['start-ballot', 'add-your-items']);
               },
               { label: 'Discard' },
             ),
@@ -716,7 +742,7 @@
           () => {
             tab = 'Rank';
             if (!draft) startBallot();
-            else render();
+            else render('ballot-heading');
           },
           'primary',
           { disabled: c.items.length < 2 },
@@ -916,12 +942,11 @@
       }
       c.items.push(...fresh);
       if (persist() === false) {
-        render();
-        document.getElementById('bulk-items').focus();
+        render('bulk-items');
         return;
       }
       pendingItemInputs.delete(c.id);
-      render();
+      render('bulk-items');
       notify(
         fresh.length +
           ' items added' +
@@ -959,7 +984,7 @@
           el(
             'div',
             { class: 'row' },
-            el('h3', {}, 'All items'),
+            el('h3', { id: 'items-heading', tabindex: '-1' }, 'All items'),
             el('span', { class: 'badge' }, c.items.length),
           ),
           c.items.map((item) =>
@@ -986,11 +1011,12 @@
                         }
                         item.name = value;
                         persist();
-                        render();
+                        render('edit-' + item.id);
                       },
                       { label: 'Save name', inputValue: item.name },
                     ),
                   'small',
+                  { id: 'edit-' + item.id },
                 ),
                 btn(
                   'Remove',
@@ -1014,7 +1040,7 @@
                           if (draft) draft = withoutItem(draft);
                           savedRound = null;
                         }
-                        render();
+                        render(['items-heading', 'bulk-items']);
                       },
                       { label: 'Remove item', danger: true },
                     ),
@@ -1038,11 +1064,12 @@
               (value) => {
                 c.name = value;
                 persist();
-                render();
+                render('rename-collection');
               },
               { label: 'Save name', inputValue: c.name },
             ),
           'link',
+          { id: 'rename-collection' },
         ),
         btn(
           'Delete collection',
@@ -1062,7 +1089,7 @@
                 draft = null;
                 savedRound = null;
                 if (persist()) pendingItemInputs.delete(c.id);
-                render();
+                render('view-heading');
               },
               { label: 'Delete collection', danger: true },
             ),
@@ -1077,7 +1104,7 @@
       return el(
         'div',
         { class: 'panel empty' },
-        el('h2', {}, 'Every preference has a history'),
+        el('h2', { id: 'history-heading', tabindex: '-1' }, 'Every preference has a history'),
         el(
           'p',
           { class: 'muted' },
@@ -1089,7 +1116,7 @@
     return el(
       'div',
       {},
-      el('h2', {}, 'Your ballots'),
+      el('h2', { id: 'history-heading', tabindex: '-1' }, 'Your ballots'),
       el(
         'p',
         { class: 'muted', style: 'font-size:13px' },
@@ -1110,19 +1137,19 @@
             'Newer',
             () => {
               historyPage--;
-              render();
+              render(['history-newer', 'history-older']);
             },
             'small',
-            { disabled: historyPage === 0 },
+            { id: 'history-newer', disabled: historyPage === 0 },
           ),
           btn(
             'Older',
             () => {
               historyPage++;
-              render();
+              render(['history-older', 'history-newer']);
             },
             'small',
-            { disabled: offset + 50 >= c.ballots.length },
+            { id: 'history-older', disabled: offset + 50 >= c.ballots.length },
           ),
         ),
       ),
@@ -1160,7 +1187,7 @@
                   () => {
                     c.ballots = c.ballots.filter((x) => x.id !== b.id);
                     persist();
-                    render();
+                    render('history-heading');
                     notify('Ballot removed; ranking recalculated.');
                   },
                   { label: 'Remove ballot', danger: true },
@@ -1210,7 +1237,7 @@
       ),
     );
   }
-  function render() {
+  function render(focusIds) {
     root.replaceChildren();
     const c = collection();
     const file = el('input', {
@@ -1301,7 +1328,7 @@
                       () => {
                         unreadableSave = null;
                         persist();
-                        render();
+                        render('view-heading');
                       },
                       { label: 'Replace save', danger: true },
                     ),
@@ -1317,7 +1344,11 @@
           'div',
           { class: 'onboard' },
           el('div', { class: 'eyebrow' }, 'Your taste. Your order.'),
-          el('h1', {}, 'Rank anything.\nDiscover your favorites.'),
+          el(
+            'h1',
+            { id: 'view-heading', tabindex: '-1' },
+            'Rank anything.\nDiscover your favorites.',
+          ),
           el(
             'p',
             { class: 'intro muted' },
@@ -1356,7 +1387,7 @@
     } else {
       main.append(
         el('div', { class: 'eyebrow' }, 'Your collection'),
-        el('h1', {}, c.name),
+        el('h1', { id: 'view-heading', tabindex: '-1' }, c.name),
         el('p', { class: 'muted' }, 'A living order of the things you prefer.'),
         el(
           'nav',
@@ -1366,10 +1397,10 @@
               t,
               () => {
                 tab = t;
-                render();
+                render('tab-' + t);
               },
               t === tab ? 'active' : '',
-              { 'aria-current': t === tab ? 'page' : 'false' },
+              { id: 'tab-' + t, 'aria-current': t === tab ? 'page' : 'false' },
             ),
           ),
         ),
@@ -1388,6 +1419,7 @@
     }
     main.append(el('footer', {}, 'Rank Anything · Preferences change. Your ranking can, too.'));
     root.append(el('div', { class: 'shell' }, sidebar, main));
+    if (focusIds !== undefined) focusContent(focusIds);
   }
   window.addEventListener('beforeunload', (e) => {
     if (draft || storageWarning || [...pendingItemInputs.values()].some((value) => value.trim())) {
