@@ -42,7 +42,9 @@ Skipped items never count as losses. Automatic rounds give recently skipped item
 
 Collections and saved ballots stay in the current browser's local storage. Nothing is uploaded or synced. Use one tab at a time, and use **Export backup** regularly—clearing browser data, private browsing, or changing browsers can make saved data unavailable.
 
-**Import backup** adds separate collections without overwriting existing ones. Importing the same file twice creates copies. Backups include saved ballots, but not a ballot in progress.
+**Import backup** adds separate collections without overwriting existing ones. Importing the same file twice creates copies. Backups include added items and saved ballots, but not unadded names or a ballot in progress.
+
+Names pasted into **Add items** stay with their collection while you switch views, edit items, or visit another collection in the same session. Add them before closing or reloading; the app warns when unadded names remain.
 
 If saving fails, the app displays a warning and you can still export your session. If an earlier save cannot be read, the app preserves it and offers a download before you explicitly replace it.
 

@@ -41,7 +41,8 @@ The browser suite opens both `index.html` and `Rank-Anything.html` through `file
 - Draft preservation when collection creation is cancelled, and confirmed creation without losing saved ballots.
 - Item deletion preserving the rest of an unfinished ballot, including ties, skips, and drafts with too few items to save.
 - Unicode duplicate handling, preservation of invalid pasted input, and successful correction.
-- Keyboard focus while moving an item to the top and bottom of a ballot.
+- Unadded lists surviving item edits and view changes, remaining separate between collections, and clearing after submission.
+- Keyboard focus while moving, skipping, and restoring items, including restoring into an empty ballot.
 - Saved data surviving reload, backup download and additive import, and a narrow results layout.
 - JavaScript errors and unexpected network requests during the smoke workflow.
 

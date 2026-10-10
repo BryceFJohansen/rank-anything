@@ -136,7 +136,11 @@ function app(initial, failWrites = false) {
     urls,
     saved: () => stored,
     data: () => JSON.parse(stored),
-    fill: (id, value) => (document.getElementById(id).value = value),
+    fill: (id, value) => {
+      const input = document.getElementById(id);
+      input.value = value;
+      input.listeners.input?.({ target: input });
+    },
     dialogInput: (value) => {
       const d = all().find((n) => n.tagName === 'dialog');
       d.children.find((n) => n.tagName === 'input').value = value;
@@ -180,6 +184,13 @@ function removeItem(a, name, confirm = true) {
     .click();
   a.click(confirm ? 'Remove item' : 'Cancel');
 }
+function warnsOnUnload(a) {
+  let prevented = false;
+  a.window.listeners.beforeunload({
+    preventDefault: () => (prevented = true),
+  });
+  return prevented;
+}
 test('create, add, chosen ballot, tie, skip, save, reload and undo', () => {
   const a = app();
   create(a);
@@ -219,12 +230,95 @@ test('Unicode duplicates are skipped and invalid pasted input survives rollback'
   assert.equal(a.saved(), before);
   assert.match(a.root.textContent, /Change not saved/);
   assert.equal(a.document.getElementById('bulk-items').value, 'Valid addition\nbad\tname');
+  a.click('Guide');
+  a.click('Items');
+  assert.equal(a.document.getElementById('bulk-items').value, 'Valid addition\nbad\tname');
   add(a, ['Valid addition', 'Corrected name']);
   assert.equal(a.data().collections[0].items.length, 5);
   a.click('Rank');
   choose(a, [0, 1]);
   a.click('Save ballot →');
   assert.equal(a.data().collections[0].ballots.length, 1);
+});
+test('unadded names survive item edits, deletion, collection renaming, and view changes', () => {
+  const a = app();
+  create(a);
+  add(a, ['Alpha', 'Beta']);
+  const text = '  Pending one\n\nPending two  ';
+  a.fill('bulk-items', text);
+  a.click('Edit');
+  a.dialogInput('Renamed Alpha');
+  a.click('Save name');
+  assert.equal(a.document.getElementById('bulk-items').value, text);
+  removeItem(a, 'Beta');
+  a.click('Rename collection');
+  a.dialogInput('Renamed collection');
+  a.click('Save name');
+  a.click('Results');
+  a.click('Items');
+  assert.equal(a.document.getElementById('bulk-items').value, text);
+  assert.deepEqual(
+    a.data().collections[0].items.map((item) => item.name),
+    ['Renamed Alpha'],
+  );
+  a.click('Add to collection');
+  a.click('Guide');
+  a.click('Items');
+  assert.equal(a.document.getElementById('bulk-items').value, '');
+  assert.deepEqual(
+    a.data().collections[0].items.map((item) => item.name),
+    ['Renamed Alpha', 'Pending one', 'Pending two'],
+  );
+});
+test('unadded lists stay with their collection and are excluded from saved data', () => {
+  const a = app();
+  create(a, 'First');
+  a.fill('bulk-items', 'First pending');
+  a.click('+ New collection');
+  a.dialogInput('Second');
+  a.click('Create collection');
+  assert.equal(a.document.getElementById('bulk-items').value, '');
+  assert.equal(warnsOnUnload(a), true);
+  a.fill('bulk-items', 'Second pending');
+  a.click('First0');
+  a.click('Items');
+  assert.equal(a.document.getElementById('bulk-items').value, 'First pending');
+  a.click('Add to collection');
+  assert.equal(warnsOnUnload(a), true);
+  a.click('Second0');
+  a.click('Items');
+  assert.equal(a.document.getElementById('bulk-items').value, 'Second pending');
+  assert.deepEqual(a.data().collections[1].items, []);
+  a.fill('bulk-items', '');
+  a.click('Rank');
+  a.click('Items');
+  assert.equal(a.document.getElementById('bulk-items').value, '');
+  assert.equal(warnsOnUnload(a), false);
+});
+test('unadded names warn before closing until added or their collection is deleted', () => {
+  const a = app();
+  create(a);
+  assert.equal(warnsOnUnload(a), false);
+  a.fill('bulk-items', '   \n');
+  assert.equal(warnsOnUnload(a), false);
+  a.fill('bulk-items', 'Pending');
+  a.click('Rank');
+  assert.equal(warnsOnUnload(a), true);
+  a.click('Items');
+  a.click('Add to collection');
+  assert.equal(warnsOnUnload(a), false);
+  a.fill('bulk-items', 'Another pending');
+  a.click('Delete collection');
+  a.click('Cancel');
+  assert.equal(warnsOnUnload(a), true);
+  a.click('Delete collection');
+  a.all()
+    .find((node) => node.tagName === 'dialog')
+    .children.at(-1)
+    .children.at(-1)
+    .click();
+  assert.deepEqual(a.data().collections, []);
+  assert.equal(warnsOnUnload(a), false);
 });
 test('new collection cancellation preserves a draft, including after accepting the warning', () => {
   const a = app();

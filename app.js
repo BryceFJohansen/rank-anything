@@ -3,6 +3,7 @@
   const E = window.RankingEngine;
   const KEY = 'rank-anything-v1';
   const root = document.getElementById('app');
+  const pendingItemInputs = new Map();
   let state = { version: 1, collections: [] },
     selected = null,
     tab = 'Rank',
@@ -395,7 +396,7 @@
     mutateDraft(() => {
       draft.groups = draft.groups.map((g) => g.filter((x) => x !== id)).filter((g) => g.length);
       draft.skipped.push(id);
-    });
+    }, 'restore-' + id);
   }
   function submit() {
     if (!draft) return;
@@ -623,8 +624,9 @@
                   mutateDraft(() => {
                     draft.skipped = draft.skipped.filter((x) => x !== id);
                     draft.groups.push([id]);
-                  }),
+                  }, ['move-up-' + id, 'skip-' + id]),
                 'small',
+                { id: 'restore-' + id, 'aria-label': 'Restore ' + name(id) },
               ),
             ),
           ),
@@ -858,7 +860,12 @@
       id: 'bulk-items',
       placeholder: 'One item per line\nThe thing you already love\nThe thing you’re curious about',
       'aria-label': 'Items, one per line',
+      onInput: (event) => {
+        if (event.target.value) pendingItemInputs.set(c.id, event.target.value);
+        else pendingItemInputs.delete(c.id);
+      },
     });
+    input.value = pendingItemInputs.get(c.id) || '';
     const add = () => {
       const values = input.value
         .split(/\r?\n/)
@@ -891,11 +898,10 @@
       c.items.push(...fresh);
       if (persist() === false) {
         render();
-        const restoredInput = document.getElementById('bulk-items');
-        restoredInput.value = input.value;
-        restoredInput.focus();
+        document.getElementById('bulk-items').focus();
         return;
       }
+      pendingItemInputs.delete(c.id);
       render();
       notify(
         fresh.length +
@@ -914,7 +920,7 @@
         el(
           'p',
           { class: 'muted', style: 'font-size:13px' },
-          'Paste your list, one item per line. Duplicate names are skipped.',
+          'Paste your list, one item per line. Duplicate names are skipped. Unadded names stay here when you switch views or collections; add them before closing.',
         ),
         el('label', { for: 'bulk-items' }, 'Add items'),
         input,
@@ -1031,13 +1037,13 @@
                 c.ballots.length +
                 ' ballots in “' +
                 c.name +
-                '” will be removed. This cannot be undone here. Export a backup first if you may want it back.',
+                '” will be removed, along with any unadded item names for this collection. This cannot be undone here. Export a backup first if you may want it back.',
               () => {
                 state.collections = state.collections.filter((x) => x.id !== c.id);
                 selected = state.collections[0]?.id || null;
                 draft = null;
                 savedRound = null;
-                persist();
+                if (persist()) pendingItemInputs.delete(c.id);
                 render();
               },
               { label: 'Delete collection', danger: true },
@@ -1175,11 +1181,11 @@
         ],
         [
           'Keep a backup',
-          'Your data lives in this browser, on this device, when browser storage is available. Nothing is uploaded, synced, or shared. Private browsing, clearing browser data, moving the app files, or switching browsers may lose or separate your saved state. Export JSON backups regularly and before deleting data. Import adds separate collections; it never overwrites existing ones. Export includes saved ballots only, not a ballot in progress.',
+          'Your data lives in this browser, on this device, when browser storage is available. Nothing is uploaded, synced, or shared. Private browsing, clearing browser data, moving the app files, or switching browsers may lose or separate your saved state. Export JSON backups regularly and before deleting data. Import adds separate collections; it never overwrites existing ones. Export includes added items and saved ballots, but not unadded names or a ballot in progress.',
         ],
         [
           'Keyboard & offline use',
-          'Use Tab to navigate and Enter or Space to activate buttons. After moving an item, focus stays on an enabled control for that item. Open index.html alongside app.js, engine.js, and style.css in a desktop browser, or use the self-contained Rank-Anything.html file. No server or internet connection is needed. Use one browser tab at a time.',
+          'Use Tab to navigate and Enter or Space to activate buttons. After moving or restoring an item, focus stays on an enabled ranking control for that item. Skipping an item moves focus to its Restore button. Open index.html alongside app.js, engine.js, and style.css in a desktop browser, or use the self-contained Rank-Anything.html file. No server or internet connection is needed. Use one browser tab at a time.',
         ],
       ].map(([title, text]) =>
         el('section', {}, el('h3', {}, title), el('p', { class: 'muted' }, text)),
@@ -1366,7 +1372,7 @@
     root.append(el('div', { class: 'shell' }, sidebar, main));
   }
   window.addEventListener('beforeunload', (e) => {
-    if (draft || storageWarning) {
+    if (draft || storageWarning || [...pendingItemInputs.values()].some((value) => value.trim())) {
       e.preventDefault();
       e.returnValue = '';
     }

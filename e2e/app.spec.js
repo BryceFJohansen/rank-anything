@@ -146,7 +146,7 @@ for (const entry of ['index.html', 'Rank-Anything.html']) {
       await page.getByRole('button', { name: 'Rank', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Save ballot →', exact: true })).toBeDisabled();
       await expect(page.getByRole('status')).toContainText('At least two ranked items are needed');
-      await page.getByRole('button', { name: 'Restore', exact: true }).click();
+      await page.getByRole('button', { name: 'Restore Gamma', exact: true }).click();
       await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
       expect((await savedData(page)).collections[0].ballots[0].groups).toEqual([[alpha], [gamma]]);
 
@@ -184,6 +184,94 @@ for (const entry of ['index.html', 'Rank-Anything.html']) {
       expect(await savedData(page)).toEqual(before);
       await addItems(page, ['Valid addition', 'Corrected name']);
       expect((await savedData(page)).collections[0].items).toHaveLength(5);
+    });
+
+    test('unadded lists survive editing and stay separate across views and collections', async ({
+      page,
+    }) => {
+      await createCollection(page, 'First');
+      await addItems(page, ['Alpha', 'Beta']);
+      const input = page.getByRole('textbox', { name: 'Items, one per line' });
+      const pending = '  Pending one\n\nPending two  ';
+      await input.fill(pending);
+      await page
+        .locator('.list-item')
+        .filter({ has: page.getByText('Alpha', { exact: true }) })
+        .getByRole('button', { name: 'Edit', exact: true })
+        .click();
+      await page.locator('dialog input').fill('Renamed Alpha');
+      await page.getByRole('button', { name: 'Save name', exact: true }).click();
+      await expect(input).toHaveValue(pending);
+      await removeItem(page, 'Beta');
+      await page.getByRole('button', { name: 'Results', exact: true }).click();
+      await page.getByRole('button', { name: 'Items', exact: true }).click();
+      await expect(input).toHaveValue(pending);
+
+      await page.getByRole('button', { name: '+ New collection', exact: true }).click();
+      await page.locator('dialog input').fill('Second');
+      await page.getByRole('button', { name: 'Create collection', exact: true }).click();
+      await expect(input).toHaveValue('');
+      await input.fill('Second pending');
+      await page
+        .getByRole('navigation', { name: 'Collections' })
+        .getByRole('button', { name: /^First/ })
+        .click();
+      await page.getByRole('button', { name: 'Items', exact: true }).click();
+      await expect(input).toHaveValue(pending);
+      await page.getByRole('button', { name: 'Add to collection', exact: true }).click();
+      await expect(input).toHaveValue('');
+      await page
+        .getByRole('navigation', { name: 'Collections' })
+        .getByRole('button', { name: /^Second/ })
+        .click();
+      await page.getByRole('button', { name: 'Items', exact: true }).click();
+      await expect(input).toHaveValue('Second pending');
+      const collections = (await savedData(page)).collections;
+      expect(collections[0].items.map((item) => item.name)).toEqual([
+        'Renamed Alpha',
+        'Pending one',
+        'Pending two',
+      ]);
+      expect(collections[1].items).toEqual([]);
+      await input.fill('');
+      await page.getByRole('button', { name: 'Guide', exact: true }).click();
+      await page.getByRole('button', { name: 'Items', exact: true }).click();
+      await expect(input).toHaveValue('');
+    });
+
+    test('keyboard skipping and restoring follow the item, including an otherwise empty ballot', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      await addItems(page, ['Alpha', 'Beta']);
+      await chooseItems(page, ['Alpha', 'Beta']);
+      const skip = (name) =>
+        page.getByRole('button', {
+          name: 'Skip ' + name + ' — not familiar or not today',
+          exact: true,
+        });
+      const restore = (name) => page.getByRole('button', { name: 'Restore ' + name, exact: true });
+      await skip('Beta').focus();
+      await page.keyboard.press('Enter');
+      await expect(restore('Beta')).toBeFocused();
+      await skip('Alpha').focus();
+      await page.keyboard.press('Enter');
+      await expect(restore('Alpha')).toBeFocused();
+      await expect(page.locator('.rank-item')).toHaveCount(0);
+      await page.keyboard.press('Enter');
+      await expect(skip('Alpha')).toBeFocused();
+      await restore('Beta').focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('button', { name: 'Move Beta up', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('.rank-group').first()).toContainText('Beta');
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
+      const collection = (await savedData(page)).collections[0];
+      expect(collection.ballots[0].groups).toEqual([
+        [collection.items[1].id],
+        [collection.items[0].id],
+      ]);
+      expect(collection.ballots[0].skipped).toEqual([]);
     });
 
     test('keyboard ranking keeps focus on an enabled control at both boundaries', async ({
