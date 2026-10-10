@@ -4,6 +4,7 @@ import html from 'eslint-plugin-html';
 import globals from 'globals';
 
 export default defineConfig([
+  { ignores: ['test-results/**', 'playwright-report/**'] },
   {
     files: ['**/*.{js,cjs,mjs,html}'],
     extends: [js.configs.recommended],
@@ -30,6 +31,17 @@ export default defineConfig([
     languageOptions: {
       sourceType: 'commonjs',
       globals: globals.node,
+    },
+  },
+  {
+    files: ['scripts/**/*.mjs', 'playwright.config.cjs'],
+    languageOptions: { globals: globals.node },
+  },
+  {
+    files: ['e2e/**/*.js'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { ...globals.node, ...globals.browser },
     },
   },
 ]);

@@ -6,16 +6,24 @@
   "license": "MIT",
   "scripts": {
     "lint": "eslint . --max-warnings 0",
-    "lint:fix": "eslint . --fix --max-warnings 0",
-    "test": "node --test"
+    "lint:fix": "eslint . --fix --max-warnings 0 && npm run build:standalone",
+    "format": "prettier --write . && npm run build:standalone",
+    "format:check": "prettier --check .",
+    "build:standalone": "node scripts/standalone.mjs",
+    "check:standalone": "node scripts/standalone.mjs --check",
+    "test": "node --test",
+    "test:browser": "playwright test",
+    "check": "npm run format:check && npm run lint && npm run check:standalone && npm test"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24.0.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.0",
     "eslint": "10.12.0",
     "eslint-plugin-html": "8.2.1",
-    "globals": "17.13.0"
+    "globals": "17.13.0",
+    "prettier": "3.9.9"
   }
 }

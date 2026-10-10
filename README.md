@@ -66,27 +66,35 @@ Use **Node.js 24 LTS**, as specified in [`.nvmrc`](.nvmrc). Install the developm
 
 ```sh
 npm ci
-npm run lint
-npm test
+npm run check
 ```
 
-ESLint checks the JavaScript source, tests, configuration, and inline HTML scripts. Warnings fail the check. Run `npm run lint:fix` to apply available automatic fixes.
+`npm run check` verifies formatting, runs ESLint, checks the standalone HTML, and runs the Node tests. ESLint warnings fail the check. Use `npm run format` to format the repository or `npm run lint:fix` to apply available lint fixes; both regenerate the standalone HTML afterward.
 
-The tests cover ranking, validation, and UI interactions through a Node-based DOM harness. They do not replace testing in a real browser. The tests themselves require no npm packages and can also be run with `node --test`.
+To run the browser suite against both entry points:
+
+```sh
+npx playwright install --with-deps --only-shell chromium
+npm run test:browser
+```
+
+GitHub Actions runs these checks on pushes and pull requests. See [TESTING.md](TESTING.md) for coverage, individual commands, and manual testing guidance.
 
 ### Project structure
 
-| File | Purpose |
-| --- | --- |
-| [`index.html`](index.html) | Entry point using the separate source files |
-| [`app.js`](app.js) | Interface, browser storage, and backup import/export |
-| [`engine.js`](engine.js) | Ranking, round selection, and data validation |
-| [`style.css`](style.css) | App styles and responsive layouts |
-| [`Rank-Anything.html`](Rank-Anything.html) | Standalone copy with embedded styles, scripts, and license |
-| [`tests/`](tests/) | Engine and UI interaction tests |
-| [`eslint.config.mjs`](eslint.config.mjs) | ESLint rules and file configuration |
+| File                                               | Purpose                                                    |
+| -------------------------------------------------- | ---------------------------------------------------------- |
+| [`index.html`](index.html)                         | Entry point using the separate source files                |
+| [`app.js`](app.js)                                 | Interface, browser storage, and backup import/export       |
+| [`engine.js`](engine.js)                           | Ranking, round selection, and data validation              |
+| [`style.css`](style.css)                           | App styles and responsive layouts                          |
+| [`Rank-Anything.html`](Rank-Anything.html)         | Standalone copy with embedded styles, scripts, and license |
+| [`tests/`](tests/)                                 | Engine and UI interaction tests                            |
+| [`e2e/`](e2e/)                                     | Chromium regression and smoke tests for both entry points  |
+| [`scripts/standalone.mjs`](scripts/standalone.mjs) | Standalone HTML generation and consistency checking        |
+| [`eslint.config.mjs`](eslint.config.mjs)           | ESLint rules and file configuration                        |
 
-When changing `app.js`, `engine.js`, or `style.css`, update the corresponding embedded content in `Rank-Anything.html` too. There is currently no build step to synchronize the standalone copy automatically.
+Edit `index.html`, `app.js`, `engine.js`, and `style.css`, then run `npm run build:standalone` to update `Rank-Anything.html`. The generator also embeds `LICENSE`. Commit the regenerated file alongside source changes; CI rejects stale output. The generated HTML is already included in the repository, so users can open it without running a build.
 
 ## Current limits
 
