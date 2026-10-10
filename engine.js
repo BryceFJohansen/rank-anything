@@ -30,6 +30,7 @@
     idLength: 100
   });
   var own = Object.prototype.hasOwnProperty;
+  // eslint-disable-next-line no-control-regex -- Reject control characters in imported names and IDs.
   var controls = /[\u0000-\u001f\u007f]/;
 
   function fail(path, message) {

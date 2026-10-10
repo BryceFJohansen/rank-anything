@@ -92,9 +92,26 @@ app.js       Accessible UI, persistence, import/export
 engine.js    Pure UMD ranking and validation engine (also CommonJS)
 tests/       Automated Node.js tests (no packages needed)
 VERIFICATION.txt  Automated and real-browser QA results and limits
+LICENSE      MIT license and copyright notice
 
 To run tests with Node.js 20 or later:
   node --test tests/*.test.js
 
-No dependencies or build process are required. The source is included for
-inspection and modification. No external network requests are made by the app.
+For development, use Node.js 24 LTS (also specified in .nvmrc), then run:
+  npm ci
+  npm run lint
+  npm test
+
+ESLint checks the JavaScript source, tests, configuration, and inline scripts
+in the HTML files. Warnings fail the lint command. To apply available automatic
+fixes, run npm run lint:fix. Keep the embedded engine.js, app.js, and style.css
+in Rank-Anything.html synchronized when editing the modular files.
+
+The npm dependencies are development tools only. No dependencies or build
+process are required to open the app. The source is included for inspection
+and modification. No external network requests are made by the app.
+
+LICENSE
+MIT License. Copyright (c) 2026 Bryce Johansen.
+See LICENSE for the full terms, including the warranty and liability disclaimer.
+The same license notice is embedded in the standalone Rank-Anything.html file.
