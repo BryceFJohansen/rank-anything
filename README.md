@@ -44,6 +44,8 @@ Collections and saved ballots stay in the current browser's local storage. Nothi
 
 **Import backup** adds separate collections without overwriting existing ones. Importing the same file twice creates copies. Backups include added items and saved ballots, but not unadded names or a ballot in progress.
 
+Exports use compact JSON. Combined collection data is limited to 100 MB so an exported backup remains within the import limit. If an addition or import would exceed that limit, the app leaves existing data intact and asks you to export a backup and remove some data first.
+
 Names pasted into **Add items** stay with their collection while you switch views, edit items, or visit another collection in the same session. Add them before closing or reloading; the app warns when unadded names remain.
 
 If saving fails, the app displays a warning and you can still export your session. If an earlier save cannot be read, the app preserves it and offers a download before you explicitly replace it.
@@ -104,7 +106,7 @@ The app is intended for one person using a desktop browser. Mobile file opening 
 
 - Up to 100 collections and 300 items per collection, with 10,000 items total.
 - Up to 20,000 ballots per collection, with 50,000 ballots total.
-- Names up to 200 characters; backup imports up to 100 MB.
+- Names up to 200 characters; backup imports and combined compact backup data up to 100 MB.
 - History shows 50 ballots per page; the evidence view shows the first 200 observed pairs. Exports retain all saved data.
 
 Existing version-1 backups, including historical ballots with up to ten items, remain supported.

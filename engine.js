@@ -28,6 +28,7 @@
     historicalBatchSize: 10,
     nameLength: 200,
     idLength: 100,
+    backupBytes: 100000000,
   });
   var own = Object.prototype.hasOwnProperty;
   // eslint-disable-next-line no-control-regex -- Reject control characters in imported names and IDs.

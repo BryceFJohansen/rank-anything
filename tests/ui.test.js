@@ -59,7 +59,7 @@ class Element {
   setCustomValidity() {}
   reportValidity() {}
 }
-function app(initial, failWrites = false) {
+function app(initial, failWrites = false, backupBytes) {
   const body = new Element('body'),
     root = new Element('div');
   root.id = 'app';
@@ -115,6 +115,12 @@ function app(initial, failWrites = false) {
     ctx,
   );
   window.RankingEngine = ctx.RankingEngine;
+  // Exercise byte boundaries with small fixtures through the real validation path.
+  if (backupBytes !== undefined)
+    window.RankingEngine = {
+      ...ctx.RankingEngine,
+      LIMITS: { ...ctx.RankingEngine.LIMITS, backupBytes },
+    };
   vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../app.js'), 'utf8'), ctx);
   const button = (txt) => {
     const e = all().find((n) => n.tagName === 'button' && n.textContent === txt);
@@ -191,6 +197,117 @@ function warnsOnUnload(a) {
   });
   return prevented;
 }
+function unicodeBackup() {
+  const items = Array.from({ length: 10 }, (_, i) => ({
+    id: '字'.repeat(99) + i,
+    name: '名'.repeat(198) + ' ' + i,
+  }));
+  return {
+    version: 1,
+    collections: [
+      {
+        id: 'c',
+        name: 'Original',
+        items,
+        ballots: [
+          {
+            id: 'legacy',
+            createdAt: '2026-10-10T00:00:00.000Z',
+            groups: items.map((item) => [item.id]),
+            skipped: [],
+          },
+        ],
+      },
+    ],
+  };
+}
+async function importBlob(a, blob) {
+  const input = a.all().find((node) => node.attrs.type === 'file');
+  input.files = [blob];
+  await input.listeners.change({ target: input });
+}
+test('exports at the byte limit can be imported again with Unicode and historical ballots intact', async () => {
+  const data = unicodeBackup();
+  const compact = JSON.stringify(data);
+  const limit = new Blob([compact]).size;
+  assert.ok(new Blob([JSON.stringify(data, null, 2)]).size > limit);
+  const original = app(compact, false, limit);
+  original.click('Export backup');
+  const blob = original.urls[0];
+  assert.equal(blob.size, limit);
+  assert.deepEqual(JSON.parse(await blob.text()), data);
+
+  const restored = app(undefined, false, limit);
+  await importBlob(restored, blob);
+  restored.click('Import collections');
+  const collection = restored.data().collections[0];
+  assert.equal(collection.id, data.collections[0].id);
+  assert.equal(collection.name, data.collections[0].name);
+  assert.deepEqual(collection.items, data.collections[0].items);
+  assert.deepEqual(collection.ballots, data.collections[0].ballots);
+  restored.click('Export backup');
+  assert.ok(restored.urls[0].size <= limit);
+});
+test('additive imports cannot exceed the combined UTF-8 byte limit', async () => {
+  const data = unicodeBackup();
+  const text = JSON.stringify(data);
+  const blob = new Blob([text]);
+  const limit = blob.size;
+  const combined = JSON.stringify({
+    ...data,
+    collections: [...data.collections, ...data.collections],
+  });
+  assert.ok(combined.length < limit, 'Character counts must not substitute for UTF-8 bytes');
+  const a = app(text, false, limit);
+  const before = a.saved();
+  await importBlob(a, blob);
+  assert.equal(a.saved(), before);
+  assert.match(a.root.textContent, /backup larger than 100 MB/);
+  assert.equal(
+    a.all().some((node) => node.tagName === 'dialog'),
+    false,
+  );
+
+  let read = false;
+  await importBlob(a, {
+    size: limit + 1,
+    text: async () => {
+      read = true;
+      return text;
+    },
+  });
+  assert.equal(read, false, 'Oversized files must be rejected before reading');
+  assert.equal(a.saved(), before);
+});
+test('size-limit failures preserve rename input, pasted items, and an unfinished ballot', () => {
+  const text = JSON.stringify(unicodeBackup());
+  const a = app(text, false, new Blob([text]).size);
+  const before = a.saved();
+  a.click('Items');
+  a.click('Rename collection');
+  a.dialogInput('A much longer collection name');
+  a.click('Save name');
+  assert.equal(a.saved(), before);
+  const dialog = a.all().find((node) => node.tagName === 'dialog');
+  assert.match(dialog.textContent, /backup larger than 100 MB/);
+  assert.equal(
+    dialog.children.find((node) => node.tagName === 'input').value,
+    'A much longer collection name',
+  );
+  a.dialogInput('Short');
+  a.click('Save name');
+  assert.equal(a.data().collections[0].name, 'Short');
+  const corrected = a.saved();
+  add(a, ['Another item']);
+  assert.equal(a.saved(), corrected);
+  assert.equal(a.document.getElementById('bulk-items').value, 'Another item');
+  a.click('Rank');
+  choose(a, [0, 1]);
+  a.click('Save ballot →');
+  assert.equal(a.saved(), corrected);
+  assert.ok(a.button('Save ballot →'));
+  assert.match(a.root.textContent, /backup larger than 100 MB/);
+});
 test('create, add, chosen ballot, tie, skip, save, reload and undo', () => {
   const a = app();
   create(a);

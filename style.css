@@ -319,6 +319,7 @@ p {
 }
 .badge {
   display: inline-block;
+  overflow-wrap: anywhere;
   font-size: 11px;
   font-weight: 650;
   padding: 5px 9px;
@@ -535,6 +536,9 @@ p {
   overflow-wrap: anywhere;
   margin: 13px 0;
 }
+.history-skipped {
+  overflow-wrap: anywhere;
+}
 .history-date {
   font-size: 12px;
   color: var(--muted);
@@ -639,7 +643,7 @@ footer {
 }
 @media (max-width: 850px) {
   .shell {
-    grid-template-columns: 190px 1fr;
+    grid-template-columns: 190px minmax(0, 1fr);
   }
   .sidebar {
     padding: 27px 14px;

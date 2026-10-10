@@ -15,6 +15,7 @@
     lastGood = JSON.stringify(state),
     unreadableSave = null,
     historyPage = 0,
+    historyCollectionId = null,
     savedRound = null;
   const uid = () =>
     'id_' +
@@ -83,9 +84,18 @@
     root.append(el('div', { class: 'toast', role: 'status' }, text));
     toastTimer = setTimeout(() => document.querySelector('.toast')?.remove(), 5500);
   }
+  function validateState(input) {
+    const valid = E.validateBackup(input);
+    // Keep combined session data importable, including after additive imports.
+    if (new Blob([JSON.stringify(valid)]).size > E.LIMITS.backupBytes)
+      throw new Error(
+        'This change would make the backup larger than 100 MB. Export a backup and remove some data before trying again.',
+      );
+    return valid;
+  }
   function persist() {
     try {
-      state = E.validateBackup(state);
+      state = validateState(state);
       lastGood = JSON.stringify(state);
     } catch (err) {
       state = JSON.parse(lastGood);
@@ -111,7 +121,7 @@
     const saved = localStorage.getItem(KEY);
     if (saved) {
       unreadableSave = saved;
-      state = E.validateBackup(JSON.parse(saved));
+      state = validateState(JSON.parse(saved));
       unreadableSave = null;
     }
     localStorage.setItem(KEY, JSON.stringify(state));
@@ -207,7 +217,7 @@
           const c = { id: uid(), name: value, items: [], ballots: [] };
           const candidate = { ...state, collections: [...state.collections, c] };
           try {
-            E.validateBackup(candidate);
+            validateState(candidate);
           } catch (err) {
             return showError('Collection not created: ' + err.message);
           }
@@ -278,7 +288,7 @@
   }
   function exportBackup() {
     download(
-      JSON.stringify(state, null, 2),
+      JSON.stringify(state),
       'rank-anything-backup-' + new Date().toISOString().slice(0, 10) + '.json',
     );
     notify('Backup download requested. Keep it somewhere safe.');
@@ -287,21 +297,28 @@
     const file = event.target.files[0];
     event.target.value = '';
     if (!file) return;
-    if (file.size > 100000000) {
+    if (file.size > E.LIMITS.backupBytes) {
       notify('That file is too large. Maximum backup size is 100 MB.');
       return;
     }
     try {
       const data = E.validateBackup(JSON.parse(await file.text()));
       if (!data.collections.length) throw new Error('This backup has no collections.');
+      const usedIds = new Set(state.collections.map((c) => c.id));
       const merged = {
         version: 1,
         collections: [
           ...state.collections,
-          ...data.collections.map((c) => ({ ...c, id: uid(), name: c.name })),
+          ...data.collections.map((c) => {
+            // Preserve IDs on restore so an exact-limit export does not grow.
+            let id = c.id;
+            while (usedIds.has(id)) id = uid();
+            usedIds.add(id);
+            return { ...c, id };
+          }),
         ],
       };
-      E.validateBackup(merged);
+      validateState(merged);
       dialog(
         'Import ' +
           data.collections.length +
@@ -466,7 +483,7 @@
       ),
     };
     try {
-      E.validateBackup(candidate);
+      validateState(candidate);
     } catch (err) {
       notify(err.message);
       return;
@@ -475,6 +492,7 @@
     if (!persist()) return;
     draft = null;
     savedRound = { collectionId: c.id, ballotId: ballot.id };
+    historyPage = 0;
     tab = 'Rank';
     render('next-round');
   }
@@ -1009,7 +1027,25 @@
                         ) {
                           return showError('Another item already uses that name.');
                         }
-                        item.name = value;
+                        const candidate = {
+                          ...state,
+                          collections: state.collections.map((x) =>
+                            x.id === c.id
+                              ? {
+                                  ...x,
+                                  items: x.items.map((i) =>
+                                    i.id === item.id ? { ...i, name: value } : i,
+                                  ),
+                                }
+                              : x,
+                          ),
+                        };
+                        try {
+                          validateState(candidate);
+                        } catch (err) {
+                          return showError('Name not saved: ' + err.message);
+                        }
+                        state = candidate;
                         persist();
                         render('edit-' + item.id);
                       },
@@ -1061,8 +1097,19 @@
             dialog(
               'Rename collection',
               'Choose a name for this collection.',
-              (value) => {
-                c.name = value;
+              (value, showError) => {
+                const candidate = {
+                  ...state,
+                  collections: state.collections.map((x) =>
+                    x.id === c.id ? { ...x, name: value } : x,
+                  ),
+                };
+                try {
+                  validateState(candidate);
+                } catch (err) {
+                  return showError('Name not saved: ' + err.message);
+                }
+                state = candidate;
                 persist();
                 render('rename-collection');
               },
@@ -1174,7 +1221,7 @@
             b.skipped.length
               ? el(
                   'p',
-                  { class: 'muted', style: 'font-size:12px' },
+                  { class: 'muted history-skipped', style: 'font-size:12px' },
                   'Skipped: ' + b.skipped.map(name).join(', '),
                 )
               : null,
@@ -1238,6 +1285,10 @@
     );
   }
   function render(focusIds) {
+    if (historyCollectionId !== selected) {
+      historyCollectionId = selected;
+      historyPage = 0;
+    }
     root.replaceChildren();
     const c = collection();
     const file = el('input', {

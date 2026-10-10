@@ -450,6 +450,136 @@ for (const entry of ['index.html', 'Rank-Anything.html']) {
       ]);
     });
 
+    test('invalid item and collection renames retain input and allow correction without changing saved data', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      await addItems(page, ['Alpha', 'Beta']);
+      for (const target of ['item', 'collection']) {
+        const before = await savedData(page);
+        const opener =
+          target === 'item'
+            ? page.getByRole('button', { name: 'Edit', exact: true }).first()
+            : page.getByRole('button', { name: 'Rename collection', exact: true });
+        await opener.click();
+        const dialog = page.getByRole('dialog');
+        const input = dialog.getByRole('textbox');
+        for (const [value, error] of [
+          ['bad\tname', 'cannot contain control characters'],
+          ['\u0344'.repeat(101), 'normalized characters'],
+        ]) {
+          await input.fill(value);
+          await input.press('Enter');
+          await expect(dialog).toBeVisible();
+          await expect(input).toHaveValue(value);
+          await expect(input).toHaveAttribute('aria-invalid', 'true');
+          await expect(input).toBeFocused();
+          await expect(dialog.getByRole('alert')).toContainText(error);
+          expect(await savedData(page)).toEqual(before);
+        }
+        await input.fill('Cafe\u0301');
+        await expect(input).toHaveAttribute('aria-invalid', 'false');
+        await input.press('Enter');
+        await expect(dialog).toHaveCount(0);
+        await expect(opener).toBeFocused();
+        const after = (await savedData(page)).collections[0];
+        expect(target === 'item' ? after.items[0].name : after.name).toBe('Café');
+        expect(after.ballots).toEqual(before.collections[0].ballots);
+      }
+    });
+
+    test('long names stay inside Results and History across desktop, tablet, and narrow widths', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      const names = ['A', 'B', 'C'].map((letter) => letter.repeat(200));
+      await addItems(page, names);
+      await chooseItems(page, names);
+      await page
+        .getByRole('button', {
+          name: 'Skip ' + names[2] + ' — not familiar or not today',
+          exact: true,
+        })
+        .click();
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
+      for (const width of [1280, 800, 601, 390, 320]) {
+        await page.setViewportSize({ width, height: 900 });
+        for (const tab of ['Results', 'History', 'Items', 'Rank', 'Guide']) {
+          await page.getByRole('button', { name: tab, exact: true }).click();
+          if (tab === 'Results' || tab === 'History') {
+            const text = page.getByText(tab === 'Results' ? names[2] : 'Skipped: ' + names[2], {
+              exact: true,
+            });
+            const size = await text.evaluate((node) => ({
+              width: node.clientWidth,
+              content: node.scrollWidth,
+            }));
+            expect(size.content, `${tab} text at ${width}px`).toBeLessThanOrEqual(size.width + 1);
+          }
+          if (tab === 'Results') {
+            await page.getByText('Inspect the pairwise evidence', { exact: true }).click();
+            await expect(page.getByRole('table')).toBeVisible();
+          }
+          const content = await page.evaluate(() => document.documentElement.scrollWidth);
+          expect(content, `${tab} page at ${width}px`).toBeLessThanOrEqual(width + 1);
+        }
+      }
+    });
+
+    test('history starts with newest ballots after changing collections, importing, or saving a round', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      await addItems(page, ['Alpha', 'Beta']);
+      await chooseItems(page, ['Alpha', 'Beta']);
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
+      const data = await savedData(page);
+      const first = data.collections[0];
+      const ballot = first.ballots[0];
+      first.ballots = Array.from({ length: 51 }, (_, i) => ({ ...ballot, id: 'ballot-' + i }));
+      data.collections.push({ ...first, id: 'films', name: 'Films' });
+      await page.evaluate(
+        (backup) => localStorage.setItem('rank-anything-v1', JSON.stringify(backup)),
+        data,
+      );
+      await page.reload();
+      const history = page.getByRole('button', { name: 'History', exact: true });
+      const older = page.getByRole('button', { name: 'Older', exact: true });
+      const pageNumber = page.getByText(/^Page \d+ of \d+$/);
+      await history.click();
+      await older.click();
+      await page.getByRole('button', { name: 'Guide', exact: true }).click();
+      await history.click();
+      await expect(pageNumber).toHaveText('Page 2 of 2');
+      for (const name of ['Films 2', 'Books 2']) {
+        await page
+          .getByRole('navigation', { name: 'Collections', exact: true })
+          .getByRole('button', { name, exact: true })
+          .click();
+        await history.click();
+        await expect(pageNumber).toHaveText('Page 1 of 2');
+        await expect(
+          page.getByRole('button', { name: 'Undo this ballot', exact: true }),
+        ).toBeVisible();
+        await older.click();
+      }
+      await chooseItems(page, ['Alpha', 'Beta']);
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
+      await history.click();
+      await expect(pageNumber).toHaveText('Page 1 of 2');
+      await expect(page.getByText('Ballot 52', { exact: true })).toBeVisible();
+      await older.click();
+      await page.locator('input[type="file"]').setInputFiles({
+        name: 'history.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify({ version: 1, collections: [data.collections[1]] })),
+      });
+      await page.getByRole('button', { name: 'Import collections', exact: true }).click();
+      await history.click();
+      await expect(pageNumber).toHaveText('Page 1 of 2');
+      await expect(page.getByText('Ballot 51', { exact: true })).toBeVisible();
+    });
+
     for (const width of [1280, 390]) {
       test(`long names wrap in the chooser and skipped list at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
