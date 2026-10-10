@@ -431,6 +431,13 @@ p {
   padding: 7px 0;
   font-size: 13px;
 }
+.skipped .row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.skipped .row > button {
+  flex-shrink: 0;
+}
 .empty {
   padding: 46px 26px;
   text-align: center;
@@ -569,6 +576,16 @@ p {
   width: calc(100% - 36px);
   color: var(--ink);
   box-shadow: 0 20px 100px #0004;
+  overflow-wrap: anywhere;
+}
+.modal .list-item > span {
+  min-width: 0;
+}
+.modal .list-item input {
+  flex: none;
+}
+.dialog-error:empty {
+  display: none;
 }
 .modal::backdrop {
   background: #142a2170;

@@ -186,6 +186,110 @@ for (const entry of ['index.html', 'Rank-Anything.html']) {
       expect((await savedData(page)).collections[0].items).toHaveLength(5);
     });
 
+    test('dialog errors are exposed to assistive technology and clear after correction', async ({
+      page,
+    }) => {
+      await page.getByRole('button', { name: 'Create a collection', exact: true }).click();
+      const creation = page.getByRole('dialog');
+      await creation.getByRole('textbox').fill('bad\tname');
+      await creation.getByRole('button', { name: 'Create collection', exact: true }).click();
+      await expect(creation.getByRole('alert')).toContainText('cannot contain control characters');
+      await expect(creation.getByRole('textbox')).toHaveValue('bad\tname');
+      await creation.getByRole('textbox').fill('Books');
+      await creation.getByRole('button', { name: 'Create collection', exact: true }).click();
+      await addItems(page, ['Alpha', 'Straße']);
+      const before = await savedData(page);
+      await page
+        .locator('.list-item')
+        .filter({ has: page.getByText('Alpha', { exact: true }) })
+        .getByRole('button', { name: 'Edit', exact: true })
+        .click();
+      const dialog = page.getByRole('dialog', { name: 'Rename item', exact: true });
+      const input = dialog.getByRole('textbox');
+      await input.fill('Strasse');
+      await input.press('Enter');
+      const message = 'Another item already uses that name.';
+      await expect(dialog.getByRole('alert')).toHaveText(message);
+      await expect(input).toHaveAccessibleDescription(message);
+      await expect(input).toHaveAttribute('aria-invalid', 'true');
+      await expect(input).toBeFocused();
+      expect(await savedData(page)).toEqual(before);
+      const client = await page.context().newCDPSession(page);
+      const { nodes } = await client.send('Accessibility.getFullAXTree');
+      expect(nodes.some((node) => !node.ignored && node.role?.value === 'alert')).toBe(true);
+      expect(
+        nodes.find(
+          (node) =>
+            !node.ignored && node.role?.value === 'textbox' && node.name?.value === 'Rename item',
+        )?.description?.value,
+      ).toBe(message);
+      await client.detach();
+      await input.fill('');
+      await input.press('Enter');
+      await expect(dialog.getByRole('alert')).toHaveText('Please enter a name.');
+      await input.fill('Renamed Alpha');
+      await expect(input).toHaveAttribute('aria-invalid', 'false');
+      await expect(input).toHaveAccessibleDescription('');
+      await expect(dialog.getByRole('alert')).toHaveCount(0);
+      await input.press('Enter');
+      await expect(dialog).toHaveCount(0);
+      expect((await savedData(page)).collections[0].items.map((item) => item.name)).toEqual([
+        'Renamed Alpha',
+        'Straße',
+      ]);
+    });
+
+    for (const width of [1280, 390]) {
+      test(`long names wrap in the chooser and skipped list at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await createCollection(page);
+        const longName = 'X'.repeat(200);
+        await addItems(page, ['Alpha', 'Beta', longName]);
+        await page.getByRole('button', { name: 'Rank', exact: true }).click();
+        await page.getByRole('button', { name: 'Choose items', exact: true }).click();
+        const dialog = page.getByRole('dialog');
+        const longRow = dialog
+          .locator('label')
+          .filter({ has: page.getByText(longName, { exact: true }) });
+        const rowSize = await longRow.evaluate((row) => ({
+          width: row.clientWidth,
+          content: row.scrollWidth,
+        }));
+        expect(rowSize.content).toBeLessThanOrEqual(rowSize.width + 1);
+        const checkbox = dialog.getByRole('checkbox', { name: longName, exact: true });
+        const box = await checkbox.boundingBox();
+        expect(box.width).toBeGreaterThanOrEqual(12);
+        for (const name of ['Alpha', 'Beta', longName])
+          await dialog.getByRole('checkbox', { name, exact: true }).check();
+        await page.getByRole('button', { name: 'Start chosen ballot', exact: true }).click();
+        await page
+          .getByRole('button', {
+            name: `Skip ${longName} — not familiar or not today`,
+            exact: true,
+          })
+          .click();
+        const restore = page.getByRole('button', { name: 'Restore ' + longName, exact: true });
+        await expect(restore).toBeFocused();
+        const layout = await page.evaluate(() => ({
+          width: innerWidth,
+          content: document.documentElement.scrollWidth,
+          scroll: scrollX,
+        }));
+        expect(layout.content).toBeLessThanOrEqual(layout.width + 1);
+        expect(layout.scroll).toBe(0);
+        const restoreBox = await restore.boundingBox();
+        expect(restoreBox.x).toBeGreaterThanOrEqual(0);
+        expect(restoreBox.x + restoreBox.width).toBeLessThanOrEqual(width);
+        await restore.click();
+        await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
+        const collection = (await savedData(page)).collections[0];
+        expect(collection.items[2].name).toBe(longName);
+        expect(collection.ballots[0].groups.flat()).toEqual(
+          collection.items.map((item) => item.id),
+        );
+      });
+    }
+
     test('unadded lists survive editing and stay separate across views and collections', async ({
       page,
     }) => {

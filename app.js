@@ -87,12 +87,34 @@
     { label = 'Continue', inputValue = null, danger = false } = {},
   ) {
     const d = el('dialog', { class: 'modal', 'aria-label': title });
+    const error = el('p', {
+      id: 'dialog-error-' + uid(),
+      class: 'notice warning dialog-error',
+      role: 'alert',
+    });
     d.append(el('h2', {}, title), el('p', {}, body));
     let field;
     if (inputValue !== null) {
-      field = el('input', { value: inputValue, maxlength: '200', 'aria-label': title });
+      field = el('input', {
+        value: inputValue,
+        maxlength: '200',
+        'aria-label': title,
+        'aria-describedby': error.id,
+        'aria-invalid': 'false',
+        onInput: () => {
+          error.textContent = '';
+          field.setAttribute('aria-invalid', 'false');
+        },
+      });
       d.append(field);
     }
+    d.append(error);
+    const showError = (message) => {
+      error.textContent = message;
+      field?.setAttribute('aria-invalid', 'true');
+      field?.focus();
+      return false;
+    };
     const close = () => {
       d.close();
       d.remove();
@@ -100,11 +122,10 @@
     const ok = () => {
       const value = field?.value.trim();
       if (field && !value) {
-        field.setCustomValidity('Please enter a name.');
-        field.reportValidity();
+        showError('Please enter a name.');
         return;
       }
-      if (onConfirm(value) !== false) close();
+      if (onConfirm(value, showError) !== false) close();
     };
     d.append(
       el(
@@ -141,18 +162,16 @@
       dialog(
         'A place for your preferences',
         'What would you like to rank? Books, games, albums, weekend plans…',
-        (value) => {
+        (value, showError) => {
           if (state.collections.length >= 100) {
-            notify('Maximum 100 collections. Export and remove one first.');
-            return false;
+            return showError('Maximum 100 collections. Export and remove one first.');
           }
           const c = { id: uid(), name: value, items: [], ballots: [] };
           const candidate = { ...state, collections: [...state.collections, c] };
           try {
             E.validateBackup(candidate);
           } catch (err) {
-            notify('Collection not created: ' + err.message);
-            return false;
+            return showError('Collection not created: ' + err.message);
           }
           state = candidate;
           selected = c.id;
@@ -957,14 +976,13 @@
                     dialog(
                       'Rename item',
                       'Ballots stay attached to this item.',
-                      (value) => {
+                      (value, showError) => {
                         if (
                           c.items.some(
                             (i) => i.id !== item.id && E.nameKey(i.name) === E.nameKey(value),
                           )
                         ) {
-                          notify('Another item already uses that name.');
-                          return false;
+                          return showError('Another item already uses that name.');
                         }
                         item.name = value;
                         persist();

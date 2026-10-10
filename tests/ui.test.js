@@ -356,10 +356,31 @@ test('renaming uses the same duplicate-name rules as adding and importing', () =
   a.click('Save name');
   assert.equal(a.saved(), before);
   assert.ok(a.button('Save name'));
-  assert.match(a.root.textContent, /Another item already uses that name/);
+  const d = a.all().find((node) => node.tagName === 'dialog');
+  assert.match(d.textContent, /Another item already uses that name/);
   a.dialogInput('Renamed');
   a.click('Save name');
   assert.equal(a.data().collections[0].items[0].name, 'Renamed');
+});
+test('invalid collection names keep the dialog open with an error and allow correction', () => {
+  const a = app();
+  a.click('Create a collection');
+  a.dialogInput('bad\tname');
+  a.click('Create collection');
+  const d = a.all().find((node) => node.tagName === 'dialog');
+  assert.ok(d);
+  assert.match(d.textContent, /cannot contain control characters/);
+  assert.equal(a.data().collections.length, 0);
+  a.dialogInput('');
+  a.click('Create collection');
+  assert.match(d.textContent, /Please enter a name/);
+  a.dialogInput('Corrected');
+  a.click('Create collection');
+  assert.equal(a.data().collections[0].name, 'Corrected');
+  assert.equal(
+    a.all().some((node) => node.tagName === 'dialog'),
+    false,
+  );
 });
 test('unreadable raw local save survives new work until explicit replace', () => {
   const a = app('{corrupt raw');

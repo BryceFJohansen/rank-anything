@@ -43,6 +43,8 @@ The browser suite opens both `index.html` and `Rank-Anything.html` through `file
 - Unicode duplicate handling, preservation of invalid pasted input, and successful correction.
 - Unadded lists surviving item edits and view changes, remaining separate between collections, and clearing after submission.
 - Keyboard focus while moving, skipping, and restoring items, including restoring into an empty ballot.
+- Dialog validation errors appearing beside the input, being exposed in Chromium's accessibility tree, and clearing after correction.
+- Long unbroken names wrapping in the chooser and skipped-items list at desktop and narrow widths, with controls remaining usable.
 - Saved data surviving reload, backup download and additive import, and a narrow results layout.
 - JavaScript errors and unexpected network requests during the smoke workflow.
 
@@ -56,4 +58,4 @@ On failure, Playwright saves screenshots and traces under `test-results/`. View 
 
 Automated browser coverage currently uses Chromium on Linux and Windows in CI. It does not establish compatibility with every Windows browser, Safari, Firefox, or mobile file manager. Use a separate browser profile and disposable collections for manual checks.
 
-Before a release, check direct file opening in the target browsers, keyboard and screen-reader navigation, storage failure warnings, backup recovery, and responsiveness with representative large collections. The narrow-layout smoke check covers the results page, not every screen or device size.
+Before a release, check direct file opening in the target browsers, keyboard and screen-reader navigation, storage failure warnings, backup recovery, and responsiveness with representative large collections. Automated accessibility checks inspect Chromium's accessibility tree; they do not replace testing with a screen reader. Narrow-layout checks cover results and long names in the chooser and skipped-items list, not every screen or device size.
