@@ -1,0 +1,63 @@
+VERIFICATION — Rank Anything 1.1
+
+Automated checks
+- 55 Node.js tests passed: 31 primary engine tests, 13 independent engine
+  tests, and 11 DOM-harness interaction/data-handling tests.
+- New-round coverage includes max-five selection, repeated five-item lists,
+  changing six-plus-item rounds, evidence-connecting overlap, two-round skip
+  cooldown, legacy ten-item imports/local saves, and repeated Save/Next events.
+- Historical ten-item ballot validation and the version-1 storage key/backup
+  schema are preserved.
+- An additional 10 independent review tests passed (65 tests total), covering
+  selection over 6–300-item collections, rotating overlap, skipped-item
+  cooldown/reintroduction, legacy compatibility, and repeated event safety.
+- Both JavaScript source files passed node --check.
+- Independent review confirmed exact engine/app/style embedding in standalone,
+  no external script/style loads, and source/ZIP byte-for-byte parity.
+- Randomized Schulze results compared against exhaustive strongest simple
+  paths in 80 small generated cases.
+- Test coverage includes cycles, ties, skips, sparse/disconnected comparisons,
+  malformed imports, prototype-shaped IDs, collection isolation, validation
+  rollback, unreadable saves, storage failure warnings, manual item selection,
+  item deletion cleanup, text-only rendering, and additive import/cancel.
+- ZIP archive integrity checked successfully.
+
+Earlier version-1.0 real-browser baseline (before five-item update)
+Checked in Chromium on the assistant's cloud computer using a temporary local
+HTTP server. These checks passed:
+- Create a collection, bulk-add 12 items, start a ten-item ballot.
+- Tie two items, skip another, move an item, save, inspect expected results.
+- Reload and verify saved items and ballots persist.
+- Cancel a ballot-removal confirmation, then undo and verify recalculation.
+- Load the self-contained HTML entry point over local HTTP.
+- Create a second empty collection and verify results remain independent.
+- Manually choose three items and save that ballot.
+- Export a backup download, import it after confirmation, and verify imported
+  collections are separate and originals remain intact.
+- Narrow-layout check at a 466-CSS-pixel viewport: document scroll width also
+  466 pixels, with no horizontal page overflow.
+
+Version-1.1 browser QA
+Passed in Chromium on the assistant's cloud computer, using standalone HTML
+on a temporary local HTTP server and a separate QA-only origin:
+- Existing QA Fruits collection (12 items, one earlier ballot) preserved.
+- Start ballot selected five items.
+- Skipped Date and tied Fig with Plum; save showed the saved confirmation
+  panel with Next round and View results.
+- Next round selected Grape, Pear, Plum, Lemon and Mango: four changed items,
+  one shared anchor (Plum), and the skipped Date left out.
+- Saving that round and opening results showed three ballots total, with
+  Date correctly left unranked rather than treated as a loss.
+- The separate existing Games collection on another local origin was left
+  untouched; these checks used only the QA origin.
+
+Verification limits
+Direct file:// opening was not tested because the cloud browser's navigation
+policy did not permit that route. Windows browsers and mobile file managers
+were not tested. The app intentionally uses classic inline/local scripts and
+no fetch, CDN, ES-module loading, or build dependencies, to support offline
+opening. Local file storage behavior still varies by browser; keep backups.
+The Node DOM harness tests logic and interactions, not a browser rendering
+engine. The separate Chromium checks above cover the listed visual/workflow
+checks only. No performance guarantee applies to every device or maximum-size
+dataset.
