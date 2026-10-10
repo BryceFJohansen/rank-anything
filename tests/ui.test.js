@@ -164,6 +164,22 @@ function choose(a, indices) {
   }
   a.click('Start chosen ballot');
 }
+function removeItem(a, name, confirm = true) {
+  const row = a
+    .all()
+    .find(
+      (node) =>
+        node.className === 'list-item' &&
+        node.children.some(
+          (child) => child.className === 'item-name' && child.textContent === name,
+        ),
+    );
+  assert.ok(row, 'Item missing: ' + name);
+  a.all(row)
+    .find((node) => node.tagName === 'button' && node.textContent === 'Remove')
+    .click();
+  a.click(confirm ? 'Remove item' : 'Cancel');
+}
 test('create, add, chosen ballot, tie, skip, save, reload and undo', () => {
   const a = app();
   create(a);
@@ -314,6 +330,93 @@ test('deleting item cleans ballot references and keeps backups valid', () => {
   a.click('Remove');
   a.click('Remove item');
   assert.equal(a.data().collections[0].ballots.length, 0);
+});
+test('cancelling deletion and removing an unrelated item preserve draft ties and skips', () => {
+  const a = app();
+  create(a);
+  add(a, ['Alpha', 'Beta', 'Gamma', 'Delta']);
+  const [alpha, beta, gamma] = a.data().collections[0].items.map((item) => item.id);
+  a.click('Rank');
+  choose(a, [0, 1, 2]);
+  a.all()
+    .find((node) => node.attrs['aria-label'] === 'Tie Beta with the rank above')
+    .click();
+  a.all()
+    .find((node) => node.attrs['aria-label']?.startsWith('Skip Gamma'))
+    .click();
+  a.click('Items');
+  const before = a.saved();
+  removeItem(a, 'Alpha', false);
+  assert.equal(a.saved(), before);
+  removeItem(a, 'Delta');
+  a.click('Rank');
+  a.click('Save ballot →');
+  const ballot = a.data().collections[0].ballots[0];
+  assert.deepEqual(ballot.groups, [[alpha, beta]]);
+  assert.deepEqual(ballot.skipped, [gamma]);
+});
+test('deleting ranked, tied, and skipped items removes only their draft references', () => {
+  const a = app();
+  create(a);
+  add(a, ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon']);
+  const [, , gamma, delta] = a.data().collections[0].items.map((item) => item.id);
+  a.click('Rank');
+  choose(a, [0, 1, 2, 3, 4]);
+  a.all()
+    .find((node) => node.attrs['aria-label'] === 'Move Gamma up')
+    .click();
+  a.all()
+    .find((node) => node.attrs['aria-label'] === 'Tie Beta with the rank above')
+    .click();
+  a.all()
+    .find((node) => node.attrs['aria-label']?.startsWith('Skip Epsilon'))
+    .click();
+  a.click('Items');
+  for (const name of ['Alpha', 'Beta', 'Epsilon']) removeItem(a, name);
+  a.click('Rank');
+  a.click('Save ballot →');
+  const ballot = a.data().collections[0].ballots[0];
+  assert.deepEqual(ballot.groups, [[gamma], [delta]]);
+  assert.deepEqual(ballot.skipped, []);
+});
+test('deletion leaves an incomplete draft available for restoring skipped items', () => {
+  const a = app();
+  create(a);
+  add(a, ['Alpha', 'Beta', 'Gamma']);
+  const [alpha, , gamma] = a.data().collections[0].items.map((item) => item.id);
+  a.click('Rank');
+  choose(a, [0, 1, 2]);
+  a.all()
+    .find((node) => node.attrs['aria-label']?.startsWith('Skip Gamma'))
+    .click();
+  a.click('Items');
+  removeItem(a, 'Beta');
+  a.click('Rank');
+  assert.equal(a.button('Save ballot →').disabled, true);
+  assert.match(a.root.textContent, /At least two ranked items are needed/);
+  a.click('Save ballot →');
+  assert.equal(a.data().collections[0].ballots.length, 0);
+  a.click('Restore');
+  a.click('Save ballot →');
+  assert.deepEqual(a.data().collections[0].ballots[0].groups, [[alpha], [gamma]]);
+});
+test('draft remains visible with one or no collection items and can be discarded', () => {
+  const a = app();
+  create(a);
+  add(a, ['Alpha', 'Beta']);
+  a.click('Rank');
+  choose(a, [0, 1]);
+  for (const name of ['Beta', 'Alpha']) {
+    a.click('Items');
+    removeItem(a, name);
+    a.click('Rank');
+    assert.equal(a.button('Save ballot →').disabled, true);
+    assert.match(a.root.textContent, /Add more items in Items/);
+  }
+  assert.equal(a.data().collections[0].ballots.length, 0);
+  a.click('Discard ballot');
+  a.click('Discard');
+  assert.ok(a.button('Add your items'));
 });
 test('malicious names remain text, no injected DOM', () => {
   const a = app();

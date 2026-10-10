@@ -46,7 +46,7 @@ Collections and saved ballots stay in the current browser's local storage. Nothi
 
 If saving fails, the app displays a warning and you can still export your session. If an earlier save cannot be read, the app preserves it and offers a download before you explicitly replace it.
 
-Export before deleting items: removing an item also removes it from previous ballots, and ballots with fewer than two ranked items are discarded.
+Export before deleting items: removing an item also removes it from previous ballots, and saved ballots with fewer than two ranked items are discarded. An unfinished ballot keeps its remaining order, ties, and skips; it needs at least two ranked items before it can be saved.
 
 ## How rankings work
 
@@ -78,7 +78,7 @@ npx playwright install --with-deps --only-shell chromium
 npm run test:browser
 ```
 
-GitHub Actions runs these checks on pushes and pull requests. See [TESTING.md](TESTING.md) for coverage, individual commands, and manual testing guidance.
+GitHub Actions runs these checks on Linux and Windows for pushes and pull requests. See [TESTING.md](TESTING.md) for coverage, individual commands, and manual testing guidance.
 
 ### Project structure
 

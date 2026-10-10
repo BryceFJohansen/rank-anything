@@ -26,6 +26,15 @@ async function savedData(page) {
   return page.evaluate(() => JSON.parse(localStorage.getItem('rank-anything-v1')));
 }
 
+async function removeItem(page, name, confirm = true) {
+  await page
+    .locator('.list-item')
+    .filter({ has: page.getByText(name, { exact: true }) })
+    .getByRole('button', { name: 'Remove', exact: true })
+    .click();
+  await page.getByRole('button', { name: confirm ? 'Remove item' : 'Cancel', exact: true }).click();
+}
+
 for (const entry of ['index.html', 'Rank-Anything.html']) {
   test.describe(entry, () => {
     test.beforeEach(async ({ page }) => {
@@ -64,6 +73,93 @@ for (const entry of ['index.html', 'Rank-Anything.html']) {
       const after = await savedData(page);
       expect(after.collections).toHaveLength(2);
       expect(after.collections[0].ballots).toEqual(collection.ballots);
+    });
+
+    test('cancelling deletion and removing an unrelated item preserve draft ties and skips', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      await addItems(page, ['Alpha', 'Beta', 'Gamma', 'Delta']);
+      const [alpha, beta, gamma] = (await savedData(page)).collections[0].items.map(
+        (item) => item.id,
+      );
+      await chooseItems(page, ['Alpha', 'Beta', 'Gamma']);
+      await page.getByRole('button', { name: 'Tie Beta with the rank above', exact: true }).click();
+      await page
+        .getByRole('button', { name: 'Skip Gamma — not familiar or not today', exact: true })
+        .click();
+      await page.getByRole('button', { name: 'Items', exact: true }).click();
+      const before = await savedData(page);
+      await removeItem(page, 'Alpha', false);
+      expect(await savedData(page)).toEqual(before);
+      await removeItem(page, 'Delta');
+      await page.getByRole('button', { name: 'Rank', exact: true }).click();
+      await expect(page.locator('.rank-group')).toHaveCount(1);
+      await expect(page.locator('.rank-group')).toContainText('Alpha');
+      await expect(page.locator('.rank-group')).toContainText('Beta');
+      await expect(page.locator('.skipped')).toContainText('Gamma');
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
+      const ballot = (await savedData(page)).collections[0].ballots[0];
+      expect(ballot.groups).toEqual([[alpha, beta]]);
+      expect(ballot.skipped).toEqual([gamma]);
+    });
+
+    test('deleting ranked, tied, and skipped items retains the remaining draft order', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      await addItems(page, ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon']);
+      const [, , gamma, delta] = (await savedData(page)).collections[0].items.map(
+        (item) => item.id,
+      );
+      await chooseItems(page, ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon']);
+      await page.getByRole('button', { name: 'Move Gamma up', exact: true }).click();
+      await page.getByRole('button', { name: 'Tie Beta with the rank above', exact: true }).click();
+      await page
+        .getByRole('button', { name: 'Skip Epsilon — not familiar or not today', exact: true })
+        .click();
+      await page.getByRole('button', { name: 'Items', exact: true }).click();
+      for (const name of ['Alpha', 'Beta', 'Epsilon']) await removeItem(page, name);
+      await page.getByRole('button', { name: 'Rank', exact: true }).click();
+      await expect(page.locator('.rank-group')).toHaveCount(2);
+      await expect(page.locator('.rank-group').first()).toContainText('Gamma');
+      await expect(page.locator('.rank-group').last()).toContainText('Delta');
+      await expect(page.locator('.skipped')).toHaveCount(0);
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
+      const ballot = (await savedData(page)).collections[0].ballots[0];
+      expect(ballot.groups).toEqual([[gamma], [delta]]);
+      expect(ballot.skipped).toEqual([]);
+    });
+
+    test('an incomplete draft stays visible and supports restoring skips or discarding', async ({
+      page,
+    }) => {
+      await createCollection(page);
+      await addItems(page, ['Alpha', 'Beta', 'Gamma']);
+      const [alpha, , gamma] = (await savedData(page)).collections[0].items.map((item) => item.id);
+      await chooseItems(page, ['Alpha', 'Beta', 'Gamma']);
+      await page
+        .getByRole('button', { name: 'Skip Gamma — not familiar or not today', exact: true })
+        .click();
+      await page.getByRole('button', { name: 'Items', exact: true }).click();
+      await removeItem(page, 'Beta');
+      await page.getByRole('button', { name: 'Rank', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Save ballot →', exact: true })).toBeDisabled();
+      await expect(page.getByRole('status')).toContainText('At least two ranked items are needed');
+      await page.getByRole('button', { name: 'Restore', exact: true }).click();
+      await page.getByRole('button', { name: 'Save ballot →', exact: true }).click();
+      expect((await savedData(page)).collections[0].ballots[0].groups).toEqual([[alpha], [gamma]]);
+
+      await chooseItems(page, ['Alpha', 'Gamma']);
+      await page.getByRole('button', { name: 'Items', exact: true }).click();
+      await removeItem(page, 'Gamma');
+      await page.getByRole('button', { name: 'Rank', exact: true }).click();
+      await expect(page.locator('.rank-group')).toContainText('Alpha');
+      await expect(page.getByRole('button', { name: 'Save ballot →', exact: true })).toBeDisabled();
+      await expect(page.getByRole('status')).toContainText('Add more items in Items');
+      await page.getByRole('button', { name: 'Discard ballot', exact: true }).click();
+      await page.getByRole('button', { name: 'Discard', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Add your items', exact: true })).toBeVisible();
     });
 
     test('Unicode duplicates are skipped and invalid pasted text can be corrected', async ({

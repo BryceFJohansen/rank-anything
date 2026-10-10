@@ -39,6 +39,7 @@ The Node tests require no npm packages and can also be run directly with `node -
 The browser suite opens both `index.html` and `Rank-Anything.html` through `file://` in isolated Chromium contexts. It checks:
 
 - Draft preservation when collection creation is cancelled, and confirmed creation without losing saved ballots.
+- Item deletion preserving the rest of an unfinished ballot, including ties, skips, and drafts with too few items to save.
 - Unicode duplicate handling, preservation of invalid pasted input, and successful correction.
 - Keyboard focus while moving an item to the top and bottom of a ballot.
 - Saved data surviving reload, backup download and additive import, and a narrow results layout.
@@ -48,10 +49,10 @@ On failure, Playwright saves screenshots and traces under `test-results/`. View 
 
 ## Continuous integration
 
-[GitHub Actions](.github/workflows/checks.yml) runs the checks on pushes and pull requests using the Node version in `.nvmrc`. It installs Chromium, tests both entry points, and uploads the browser report.
+[GitHub Actions](.github/workflows/checks.yml) runs the checks on Linux and Windows for pushes and pull requests using the Node version in `.nvmrc`. Each job installs Chromium, tests both entry points, and uploads a separate browser report.
 
 ## Manual checks and limits
 
-Automated browser coverage currently uses Chromium on Linux in CI. It does not establish compatibility with every Windows browser, Safari, Firefox, or mobile file manager. Use a separate browser profile and disposable collections for manual checks.
+Automated browser coverage currently uses Chromium on Linux and Windows in CI. It does not establish compatibility with every Windows browser, Safari, Firefox, or mobile file manager. Use a separate browser profile and disposable collections for manual checks.
 
 Before a release, check direct file opening in the target browsers, keyboard and screen-reader navigation, storage failure warnings, backup recovery, and responsiveness with representative large collections. The narrow-layout smoke check covers the results page, not every screen or device size.

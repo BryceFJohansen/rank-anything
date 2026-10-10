@@ -1759,7 +1759,7 @@ footer {
     render();
   }
   function rankView(c) {
-    if (c.items.length < 2)
+    if (c.items.length < 2 && !draft)
       return el(
         'div',
         { class: 'panel empty' },
@@ -1958,6 +1958,17 @@ footer {
             { class: 'muted', style: 'font-size:12px;margin-bottom:0' },
             'Skipped items have no effect on this ballot. Restored items start at the bottom; move them where they belong.',
           ),
+        ),
+      );
+    if (countRanked() < 2)
+      section.append(
+        el(
+          'div',
+          { class: 'notice', role: 'status' },
+          'At least two ranked items are needed to save this ballot. ' +
+            (c.items.length < 2
+              ? 'Add more items in Items, then use Choose items to start a new ballot.'
+              : 'Restore skipped items or use Choose items to start a new ballot.'),
         ),
       );
     section.append(
@@ -2287,21 +2298,23 @@ footer {
                   () =>
                     dialog(
                       'Remove ' + item.name + '?',
-                      'This removes the item from saved ballots, too. Ballots with fewer than two ranked items afterward will be removed. Export a backup first if you might want to restore it.',
+                      'This removes the item from saved ballots, too. Saved ballots with fewer than two ranked items afterward will be removed. Any unfinished ballot keeps its remaining order, ties, and skips. Export a backup first if you might want to restore the item.',
                       () => {
+                        const withoutItem = (ballot) => ({
+                          ...ballot,
+                          groups: ballot.groups
+                            .map((group) => group.filter((id) => id !== item.id))
+                            .filter((group) => group.length),
+                          skipped: ballot.skipped.filter((id) => id !== item.id),
+                        });
                         c.items = c.items.filter((i) => i.id !== item.id);
                         c.ballots = c.ballots
-                          .map((b) => ({
-                            ...b,
-                            groups: b.groups
-                              .map((g) => g.filter((id) => id !== item.id))
-                              .filter((g) => g.length),
-                            skipped: b.skipped.filter((id) => id !== item.id),
-                          }))
+                          .map(withoutItem)
                           .filter((b) => b.groups.flat().length >= 2);
-                        draft = null;
-                        savedRound = null;
-                        persist();
+                        if (persist()) {
+                          if (draft) draft = withoutItem(draft);
+                          savedRound = null;
+                        }
                         render();
                       },
                       { label: 'Remove item', danger: true },
