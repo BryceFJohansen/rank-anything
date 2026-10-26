@@ -18,8 +18,8 @@ Rank Anything runs entirely in your browser. There are no accounts, tracking, cl
 Clone the repository:
 
 ```sh
-git clone https://github.com/BryceFJohansen/Rank-Anything.git
-cd Rank-Anything
+git clone https://github.com/BryceFJohansen/rank-anything.git
+cd rank-anything
 ```
 
 Open `index.html` in a modern desktop browser. Keep `app.js`, `engine.js`, and `style.css` beside it. No server, build step, or npm installation is needed to use the app.
